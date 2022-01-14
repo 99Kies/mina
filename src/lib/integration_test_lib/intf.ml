@@ -35,7 +35,10 @@ module Engine = struct
 
       val network_keypair : t -> Network_keypair.t option
 
-      val start : fresh_state:bool -> t -> unit Malleable_error.t
+      val start :
+        fresh_state:bool -> 
+        ?env_vars:(string * string) list ->
+        t -> unit Malleable_error.t
 
       val stop : t -> unit Malleable_error.t
 

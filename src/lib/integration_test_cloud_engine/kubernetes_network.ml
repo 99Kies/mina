@@ -41,19 +41,25 @@ module Node = struct
     in
     Util.run_cmd_exn cwd "sh" [ "-c"; kubectl_cmd ]
 
-  let run_in_container node ~container_id ~cmd =
+  let run_in_container ?(env_vars=[]) node ~container_id ~cmd =
     let base_args = base_kube_args node in
     let base_kube_cmd = "kubectl " ^ String.concat ~sep:" " base_args in
+    let env = List.map ~f:(fun (k, v) -> sprintf "%s=%s" k v) env_vars |> 
+      String.concat ~sep:" " 
+    in
+    let cmd_with_env =
+      match env with "" -> cmd | _ -> sprintf "env %s %s" env cmd
+    in
     let kubectl_cmd =
-      Printf.sprintf
+      sprintf
         "%s -c %s exec -i $( %s get pod -l \"app=%s\" -o name) -- %s"
-        base_kube_cmd container_id base_kube_cmd node.pod_id cmd
+        base_kube_cmd container_id base_kube_cmd node.pod_id cmd_with_env
     in
     let%bind.Deferred cwd = Unix.getcwd () in
     Util.run_cmd_exn cwd "sh" [ "-c"; kubectl_cmd ]
 
-  let run_in_container_unit node ~container_id ~cmd =
-    let%map (_output : string) = run_in_container node ~container_id ~cmd in
+  let run_in_container_unit ?(env_vars=[]) node ~container_id ~cmd =
+    let%map (_output : string) = run_in_container ~env_vars node ~container_id ~cmd in
     ()
 
   (* we dont use this functionality atm but if we need logic that runs commands in all containers a whole pod at a time, here it is *)
@@ -75,7 +81,7 @@ module Node = struct
      let result_list = List.map container_list ~f:call_run in
      List.fold result_list ~init:(Deferred.return "") ~f:foldh *)
 
-  let start ~fresh_state node : unit Malleable_error.t =
+  let start ~fresh_state ?(env_vars=[]) node : unit Malleable_error.t =
     let open Deferred.Let_syntax in
     let%bind () =
       run_in_container_unit node ~container_id:node.mina_container_id
@@ -88,7 +94,7 @@ module Node = struct
       else Deferred.return ()
     in
     let%bind () =
-      run_in_container_unit node ~container_id:node.mina_container_id
+      run_in_container_unit ~env_vars node ~container_id:node.mina_container_id
         ~cmd:"/start.sh"
     in
     Malleable_error.return ()
